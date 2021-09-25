@@ -12,7 +12,7 @@ alias generic_build_flags="USE_FBGEMM=0 BUILD_TEST=0 USE_NNPACK=0 USE_QNNPACK=0 
 alias simple_build="USE_CUDA=0 generic_build_flags"
 alias cuda_build="USE_CUDA=1 TORCH_CUDA_ARCH_LIST=7.0 generic_build_flags"
 
-if [ $(which srun &> /dev/null) ]; then
+if command -v srun &> /dev/null; then
     alias maybe_run_remote="srun --cpus-per-task=24 -t 5:00:00"
 else 
     alias maybe_run_remote=""
@@ -27,16 +27,13 @@ alias cuda_build_install_remote="cuda_build maybe_run_remote python setup.py ins
 # CUDA_HOME="/usr/local/cuda-11.0/" CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"} PATH="/usr/local/cuda-11.0/bin:$PATH" cuda_build_install_remote
 
 
-CONDA_PATH=$(which conda)
-if [ -z $CONDA_PATH ]; then
+if [ -z "${CONDA_EXE}" ]; then
     echo "Could not find conda"
 else
-    conda deactivate || true
-    CONDA_BIN=$(dirname ${CONDA_PATH})
+    CONDA_BIN=$(dirname ${CONDA_EXE})
     if [[ ! $PATH == *"$CONDA_BIN"* && -f ${CONDA_BIN}/activate ]]; then
       export PATH="${PATH}:${CONDA_BIN}"
     fi
-    conda activate || true
 fi
 
 
