@@ -1,8 +1,29 @@
-# Helper functions for building PyTorch
+# Helper functions for building PyTorch (On both Devserver/DevGPU and AWS cluster.)
 #   make_clean_env
+#       Fixing (or even diagnosing) a sick environment is very time consuming.
+#       When in doubt, just nuke it and go back to a good starting point.
+#
 #   config_env
+#       Conda can associate an environment variable with a conda env. Tired of
+#       remembering where CUDA_HOME should be, or having to rebuild because you ran
+#           `USE_CUDA=0 USE_FBGEMM=0 BUILD_TEST=0 USE_NNPACK=0 USE_QNNPACK=0 USE_DISTRIBUTED=0 USE_TENSORPIPE=0 USE_GLOO=0 USE_MPI=0 BUILD_CAFFE2_OPS=0 BUILD_CAFFE2=0 REL_WITH_DEB_INFO=ON MAX_JOBS=32 python setup.py develop`
+#       but you meant to run
+#           `USE_CUDA=1 USE_FBGEMM=0 BUILD_TEST=0 USE_NNPACK=0 USE_QNNPACK=0 USE_DISTRIBUTED=0 USE_TENSORPIPE=0 USE_GLOO=0 USE_MPI=0 BUILD_CAFFE2_OPS=0 BUILD_CAFFE2=0 REL_WITH_DEB_INFO=ON MAX_JOBS=32 python setup.py develop`
+#       (This is WIP. Feel free to suggest your own favorite config options.)
+#
 #   build_develop
 #   build_install
+#       Abstracts away the `srun` command, so the same build command works
+#       everywhere. Plus it checks that you are actually in a conda env.
+#       The number of times I've contaminated my base env and not noticed...
+#
+#   ammend_to
+#       Helper to add to a prior commit. (e.g. `ammend_to HEAD` or `ammend_to HEAD~3`)
+#       Very helpful with ghstack, where rebasing can otherwise get very dicy. Plus
+#       there are lots of checks so you don't accidentally bork your repo or lose
+#       your changes.
+#
+
 
 function _helper_conda_available() {
     $(command -v conda &> /dev/null) && \
