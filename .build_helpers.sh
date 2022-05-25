@@ -14,8 +14,9 @@
 #   build_develop
 #   build_install
 #       Abstracts away the `srun` command, so the same build command works
-#       everywhere. Plus it checks that you are actually in a conda env.
-#       The number of times I've contaminated my base env and not noticed...
+#       everywhere. Plus it checks that you are actually in a conda env (the 
+#       number of times I've contaminated my base env and not noticed...) and
+#       some other common missteps.
 #
 #   ammend_to
 #       Helper to add to a prior commit. (e.g. `ammend_to HEAD` or `ammend_to HEAD~3`)
@@ -44,7 +45,7 @@ function _helper_init() {
 
     # By default aliases are not used in non-interactive contexts.
     # TODO: reuse aliases.
-    export _HELPER_CPURUN=$(if [ ${_HELPER_USE_SRUN} ]; then echo "srun -t 5:00:00 --cpus-per-task=24"; fi)
+    export _HELPER_CPURUN=$(if [ ${_HELPER_USE_SRUN} ]; then echo "srun -t 5:00:00 --cpus-per-task=48"; fi)
     export _HELPER_GPURUN=$(if [ ${_HELPER_USE_SRUN} ]; then echo "srun -p dev --cpus-per-task=16 -t 5:00:00 --gpus-per-node=2"; fi)
 
     # Sometimes conda needs a bit of help to get going.
@@ -153,8 +154,7 @@ function config_env() {
     function _choices() {
         echo "Choices:"
         echo "  clean"
-        echo "  cuda 11.0"
-        echo "  cuda 10.2"
+        echo "  cuda 11.4"
         echo "  cuda off"
         echo "  fast_build"
     }
@@ -171,26 +171,14 @@ function config_env() {
         unset BUILD_CAFFE2
         conda env config vars unset USE_CUDA CUDA_HOME BUILD_TEST BUILD_CAFFE2_OPS BUILD_CAFFE2 > /dev/null
 
-    elif [[ "${1}" == "cuda" && "${2}" == "11.0" ]]; then
+    elif [[ "${1}" == "cuda" && "${2}" == "11.4" ]]; then
 
         # The AWS cluster has system cuda installs. On DevGPU we have to use conda.
         if [ -d "/usr/local/cuda-11.0/" ]; then
-            export CUDA_HOME="/usr/local/cuda-11.0/"
+            export CUDA_HOME="/usr/local/cuda-11.4/"
         else
-            conda install -y -c conda-forge cudatoolkit-dev=11.0 cudnn || _helper_fail "Install CUDA 11.0"
+            conda install -y -c conda-forge cudatoolkit-dev=11.4 cudnn || _helper_fail "Install CUDA 11.4"
             export CUDA_HOME="${CONDA_PREFIX}/pkgs/cuda-toolkit/"
-        fi
-
-        export USE_CUDA=1
-        conda env config vars set USE_CUDA=1 CUDA_HOME="${CUDA_HOME}" > /dev/null
-
-    elif [[ "${1}" == "cuda" && "${2}" == "10.2" ]]; then
-
-        # The AWS cluster has system cuda installs. On DevGPU we have to use conda.
-        if [ -d "/usr/local/cuda-10.2/" ]; then
-            export CUDA_HOME="/usr/local/cuda-10.2/"
-        else
-            _helper_fail "CUDA 10.2 is only on the AWS cluster. (Because I'm too lazy to set it up for DevGPU.)"
         fi
 
         export USE_CUDA=1
