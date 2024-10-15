@@ -14,7 +14,7 @@
 #   build_develop
 #   build_install
 #       Abstracts away the `srun` command, so the same build command works
-#       everywhere. Plus it checks that you are actually in a conda env (the 
+#       everywhere. Plus it checks that you are actually in a conda env (the
 #       number of times I've contaminated my base env and not noticed...) and
 #       some other common missteps.
 #
@@ -24,6 +24,23 @@
 #       there are lots of checks so you don't accidentally bork your repo or lose
 #       your changes.
 #
+
+function pip(){
+  if [ "${CONDA_PROMPT_MODIFIER-}" = "(base) " ] && [ "$1" = "install" ]; then
+    echo "Not allowed in base"
+  else
+    command pip "$@"
+  fi
+}
+
+function _extended_conda(){
+  if [ "${CONDA_PROMPT_MODIFIER-}" = "(base) " ] && [ "$1" = "install" ]; then
+    echo "Not allowed in base"
+  else
+    conda "$@"
+  fi
+}
+alias conda=_extended_conda
 
 
 function _helper_conda_available() {
@@ -37,17 +54,6 @@ function _helper_fail {
 }
 
 function _helper_init() {
-    # This config is quite cheap, so we rerun it frequently to make sure we pick
-    # up any changes since the shell started.
-
-    # On the AWS cluster we have to run with srun, while on devserver we run locally.
-    export _HELPER_USE_SRUN="$(if [ $(command -v srun) ]; then echo true; fi)"
-
-    # By default aliases are not used in non-interactive contexts.
-    # TODO: reuse aliases.
-    export _HELPER_CPURUN=$(if [ ${_HELPER_USE_SRUN} ]; then echo "srun -t 5:00:00 --cpus-per-task=48"; fi)
-    export _HELPER_GPURUN=$(if [ ${_HELPER_USE_SRUN} ]; then echo "srun -p dev --cpus-per-task=16 -t 5:00:00 --gpus-per-node=2"; fi)
-
     # Sometimes conda needs a bit of help to get going.
     if ! _helper_conda_available; then
         if [ ! -z "${CONDA_EXE}" ]; then
@@ -89,10 +95,11 @@ function make_clean_env() {
     _helper_init || _helper_fail "init"
 
     ENV_NAME="$1"
+    PY_VERSION="${2:-3.11}"
     if [ ! "${ENV_NAME}" ]; then
         echo "Usage: make_clean_env ENV_NAME [PY_VERSION]"
         echo "Create a new conda environment and configure for PyTorch."
-        echo "Example: make_clean_env my_env 3.8"
+        echo "Example: make_clean_env my_env 3.11"
     fi
 
     # Make sure we are in a clean state. (10 deep should be plenty...)
@@ -103,111 +110,12 @@ function make_clean_env() {
         fi
     done
 
-    GENERIC_INSTALLS="numpy ninja pyyaml mkl mkl-include setuptools cmake cffi hypothesis"
-
-    CONDA_FORGE_INSTALLS="expecttest valgrind"
-    if ! $(git lfs 2>1 > /dev/null); then
-        CONDA_FORGE_INSTALLS="${CONDA_FORGE_INSTALLS} git-lfs"
-    fi
-
-    PY_VERSION="${2:-3.7}"
-    if [[ "${PY_VERSION}" == "3.7" ]]; then
-        GENERIC_INSTALLS="${GENERIC_INSTALLS} typing_extensions dataclasses"
-    elif [[ "${PY_VERSION}" == "3.8" ]]; then
-        true
-    elif [[ "${PY_VERSION}" == "3.9" ]]; then
-        true
-    else
-        _helper_fail "Unknown PY_VERSION=${PY_VERSION}"
-    fi
-
     conda env remove --name "${ENV_NAME}" 2> /dev/null || _helper_fail "Cleanup old env: ${ENV_NAME}"
     conda create --no-default-packages -y -n "${ENV_NAME}" python="${PY_VERSION}" || _helper_fail "Make env: ${ENV_NAME}"
-    
-    {
-        # Install packages.
-        conda activate &&
-        . activate "${ENV_NAME}" &&
-        conda install -y $GENERIC_INSTALLS &&
-        conda install -y -c conda-forge $CONDA_FORGE_INSTALLS
-    } || {
-        # Cleanup if install fails.
-        echo "Cleaning up failed env"
-        conda env remove --name "${ENV_NAME}" 2> /dev/null
-        return 1
-    }
-
-    if [ ! $(command -v ghstack) ]; then
-        _helper_test_https
-        pip install ghstack || _helper_fail "Install ghstack"
-    fi
 
     # Drop back to base env.
     conda deactivate && conda activate
     printf "\nENV:    ${ENV_NAME}\nPython: ${PY_VERSION}\n\n"
-}
-
-function config_env() {
-    _helper_init || _helper_fail "init"
-    _helper_assert_in_env
-
-    function _choices() {
-        echo "Choices:"
-        echo "  clean"
-        echo "  cuda 11.4"
-        echo "  cuda off"
-        echo "  fast_build"
-    }
-
-    if [[ ! "${1}" ]]; then
-        _choices
-        return 0
-
-    elif [[ "${1}" == "clean" ]]; then
-        unset USE_CUDA 
-        unset CUDA_HOME
-        unset BUILD_TEST
-        unset BUILD_CAFFE2_OPS
-        unset BUILD_CAFFE2
-        conda env config vars unset USE_CUDA CUDA_HOME BUILD_TEST BUILD_CAFFE2_OPS BUILD_CAFFE2 > /dev/null
-
-    elif [[ "${1}" == "cuda" && "${2}" == "11.4" ]]; then
-
-        # The AWS cluster has system cuda installs. On DevGPU we have to use conda.
-        if [ -d "/usr/local/cuda-11.0/" ]; then
-            export CUDA_HOME="/usr/local/cuda-11.4/"
-        else
-            conda install -y -c conda-forge cudatoolkit-dev=11.4 cudnn || _helper_fail "Install CUDA 11.4"
-            export CUDA_HOME="${CONDA_PREFIX}/pkgs/cuda-toolkit/"
-        fi
-
-        export USE_CUDA=1
-        conda env config vars set USE_CUDA=1 CUDA_HOME="${CUDA_HOME}" > /dev/null
-
-    elif [[ "${1}" == "cuda" && "${2}" == "off" ]]; then
-        export USE_CUDA=0
-        conda env config vars set USE_CUDA=0 > /dev/null
-
-    elif [[ "${1}" == "fast_build" ]]; then
-        export BUILD_TEST=0
-        export BUILD_CAFFE2_OPS=0
-        export BUILD_CAFFE2=0
-        conda env config vars set BUILD_TEST=0 BUILD_CAFFE2_OPS=0 BUILD_CAFFE2=0 > /dev/null
-
-    else
-        _choices
-        echo
-        _helper_fail "Unknown choice: ${1} ${2}"
-
-    fi
-}
-
-function build_develop() {
-    _helper_build develop
-}
-
-function build_install() {
-    _helper_build install
 }
 
 ammend_to() {
@@ -244,5 +152,3 @@ ammend_to() {
         git stash pop
     fi
 }
-
-

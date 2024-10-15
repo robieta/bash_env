@@ -27,10 +27,10 @@ if [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
 fi
 
 # PyTorch environment variables.
-export CFLAGS="-fomit-frame-pointer"
-export REL_WITH_DEB_INFO=1
-export TORCH_CUDA_ARCH_LIST=8.0  # A100
+# export CFLAGS="-fomit-frame-pointer"
+# export REL_WITH_DEB_INFO=1
+# export TORCH_CUDA_ARCH_LIST=9.0  # H100
 
-# Define: make_clean_env, config_env, build_develop, build_install
+# Define: `make_clean_env` and `ammend_to`
 source "$(dirname ${BASH_SOURCE[0]})/.build_helpers.sh"
 _helper_init
